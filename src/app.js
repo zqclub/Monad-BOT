@@ -4,6 +4,7 @@ const {
   SwapService,
   TokenService,
   BeanswapService,
+  KuruSwapService, // 新增引用
 } = require("./services/Service");
 const Utils = require("./core/Utils");
 const config = require("../config/config");
@@ -42,6 +43,7 @@ class Application {
         izumiSwap: { name: "Izumi 交换", service: SwapService },
         beanSwap: { name: "Bean 交换", service: BeanswapService },
         magmaStaking: { name: "Magma 质押", service: StakingService, address: config.contracts.magma },
+        kuruSwap: { name: "Kuru 交换", service: KuruSwapService }, // 新增 KuruSwapService
       };
 
       for (const [key, info] of Object.entries(serviceDefinitions)) {
@@ -115,6 +117,7 @@ class Application {
         this.transactionHistory.shift();
       }
       GlobalLogger.log("info", `交易历史: ${JSON.stringify(this.transactionHistory)}`);
+      
       for (const [name, service] of Object.entries(this.services)) {
         try {
           GlobalLogger.log("info", `${name}: 开始执行...`);
@@ -130,9 +133,27 @@ class Application {
             GlobalLogger.log("info", `${name}: MON 交换为 USDC - ${swapResult.status}`);
             await Utils.delay(Utils.getRandomDelay());
             let backAmount = Utils.getRandomAmount();
-            let usdcAmount = ethers.parseUnits(ethers.formatEther(backAmount).slice(0, 8), 6); // v6 保持一致
+            let usdcAmount = ethers.parseUnits(ethers.formatEther(backAmount).slice(0, 8), 6);
             swapResult = await service.swapExactTokensForETH(tokenAddress, usdcAmount);
             GlobalLogger.log("info", `${name}: USDC 交换为 MON - ${swapResult.status}`);
+          } else if (service instanceof KuruSwapService) { // 新增 KuruSwapService 逻辑
+            const tokens = [
+              config.contracts.kuruswap.chog,
+              config.contracts.kuruswap.dak,
+              config.contracts.kuruswap.yaki,
+            ];
+            const tokenSymbols = ["CHOG", "DAK", "YAKI"];
+            const randomIndex = Math.floor(Math.random() * tokens.length);
+            const tokenAddress = tokens[randomIndex];
+            const tokenSymbol = tokenSymbols[randomIndex];
+
+            const swapToTokenResult = await service.swapExactMONForTokens(tokenAddress, amount);
+            GlobalLogger.log("info", `${name}: MON 交换为 ${tokenSymbol} - ${swapToTokenResult.status}`);
+            await Utils.delay(Utils.getRandomDelay());
+
+            const backAmount = ethers.parseUnits("0.01", 18);
+            const swapToMonResult = await service.swapExactTokensForMON(tokenAddress, backAmount);
+            GlobalLogger.log("info", `${name}: ${tokenSymbol} 交换为 MON - ${swapToMonResult.status}`);
           } else {
             const stakeResult = await service.stake(amount);
             GlobalLogger.log("info", `${name}: 质押 MON - ${stakeResult.status}`);
